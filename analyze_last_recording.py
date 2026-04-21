@@ -164,6 +164,7 @@ def analyze_trca(
     metric_time_mask = (times >= METRIC_WINDOW_TMIN) & (times <= METRIC_WINDOW_TMAX)
     if not np.any(metric_time_mask):
         raise RuntimeError("Metric window mask is empty. Check epoch and metric window bounds.")
+    metric_times = times[metric_time_mask]
 
     for class_idx, cls_data in enumerate(per_class):
         cls_metric = cls_data[:, :, metric_time_mask]
@@ -191,6 +192,7 @@ def analyze_trca(
         "p_target": np.asarray(p_target_vals),
         "p_other": np.asarray(p_other_vals),
         "ratio": np.asarray(ratio_vals),
+        "metric_times": metric_times,
         "target_templates": np.asarray(target_templates),
         "other_templates": np.asarray(other_templates),
     }
@@ -198,14 +200,15 @@ def analyze_trca(
 
 def plot_results(times: np.ndarray, labels: Sequence[str], stats: Dict[str, np.ndarray], output_dir: Path) -> Tuple[Path, Path]:
     n_classes = len(labels)
+    plot_times = stats.get("metric_times", times)
 
     fig_wave, axes = plt.subplots(n_classes, 1, figsize=(11, 2.6 * n_classes), sharex=True)
     if n_classes == 1:
         axes = [axes]
 
     for i, ax in enumerate(axes):
-        ax.plot(times, stats["target_templates"][i], label=f"{labels[i]}: detected potential", linewidth=2)
-        ax.plot(times, stats["other_templates"][i], label=f"{labels[i]}: other-classes potential", linewidth=2, alpha=0.85)
+        ax.plot(plot_times, stats["target_templates"][i], label=f"{labels[i]}: detected potential", linewidth=2)
+        ax.plot(plot_times, stats["other_templates"][i], label=f"{labels[i]}: other-classes potential", linewidth=2, alpha=0.85)
         ax.axhline(0.0, color="black", linewidth=0.8, alpha=0.5)
         ax.set_ylabel("a.u.")
         ax.grid(alpha=0.25)
