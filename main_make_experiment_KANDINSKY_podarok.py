@@ -163,9 +163,9 @@ class ProtocolEditor(QtWidgets.QWidget):
         self.colors = ["blue", "orange", "green", "violet", "red", "lightblue", "yellow", "navy"]
 
         self.stim_mode = "comp"
-        self.stim_duration = 0.05
-        self.trial_duration = 0.4
-        self.trials_per_class = 20
+        self.stim_duration = 0.1
+        self.trial_duration = 0.8
+        self.trials_per_class = 50
 
         self.lsl_button = QPushButton("UPD lsl streams")
         self.lsl_button.clicked.connect(self.upd_lsl_streams)
