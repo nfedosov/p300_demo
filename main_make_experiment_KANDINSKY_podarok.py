@@ -27,6 +27,11 @@ from PyQt5.QtWidgets import (
 import AsyncKandinsky as kandinsky
 from lsl_inlet import LSLInlet
 
+VIS_EPOCH_TMIN = -0.2
+VIS_EPOCH_TMAX = 1.0
+METRIC_WINDOW_TMIN = 0.1
+METRIC_WINDOW_TMAX = 0.7
+
 
 def trca_fit(epochs_data: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Fit TRCA spatial filters for epochs with shape (n_trials, n_channels, n_times)."""
@@ -297,21 +302,23 @@ class ProtocolEditor(QtWidgets.QWidget):
         list_of_scenes: Sequence[str],
         event_id: dict,
     ) -> Tuple[int, np.ndarray]:
-        baseline_len = -0.1
         epochs = mne.Epochs(
             raw,
             events=events_by_sample,
             event_id=event_id,
-            tmin=baseline_len,
-            tmax=1.0,
-            baseline=(baseline_len, 0.0),
+            tmin=VIS_EPOCH_TMIN,
+            tmax=VIS_EPOCH_TMAX,
+            baseline=None,
             preload=True,
             verbose=False,
         )
+        metric_time_mask = (epochs.times >= METRIC_WINDOW_TMIN) & (epochs.times <= METRIC_WINDOW_TMAX)
+        if not np.any(metric_time_mask):
+            raise RuntimeError("Metric window mask is empty. Check epoch and metric window bounds.")
 
         class_epochs = []
         for scene in list_of_scenes:
-            scene_data = epochs[scene].get_data()
+            scene_data = epochs[scene].get_data()[:, :, metric_time_mask]
             if len(scene_data) < 2:
                 raise RuntimeError(
                     f"Not enough epochs for class '{scene}' for TRCA (need >=2, got {len(scene_data)})."

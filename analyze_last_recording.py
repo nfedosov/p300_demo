@@ -14,8 +14,10 @@ import mne
 import numpy as np
 
 
-EPOCH_TMIN = 0.0
-EPOCH_TMAX = 0.8
+VIS_EPOCH_TMIN = -0.2
+VIS_EPOCH_TMAX = 1.0
+METRIC_WINDOW_TMIN = 0.1
+METRIC_WINDOW_TMAX = 0.7
 
 
 def trca_fit(epochs_data: np.ndarray) -> np.ndarray:
@@ -138,9 +140,9 @@ def prepare_epochs(data: Dict) -> Tuple[np.ndarray, Dict[str, np.ndarray], List[
         raw,
         events,
         event_id=event_id,
-        tmin=EPOCH_TMIN,
-        tmax=EPOCH_TMAX,
-        baseline=(EPOCH_TMIN, EPOCH_TMIN),
+        tmin=VIS_EPOCH_TMIN,
+        tmax=VIS_EPOCH_TMAX,
+        baseline=None,
         preload=True,
         detrend=1,
         verbose=False,
@@ -150,18 +152,30 @@ def prepare_epochs(data: Dict) -> Tuple[np.ndarray, Dict[str, np.ndarray], List[
     return epochs.times.copy(), epochs_by_class, class_labels
 
 
-def analyze_trca(epochs_by_class: Dict[str, np.ndarray], class_labels: Sequence[str]) -> Dict[str, np.ndarray]:
+def analyze_trca(
+    times: np.ndarray,
+    epochs_by_class: Dict[str, np.ndarray],
+    class_labels: Sequence[str],
+) -> Dict[str, np.ndarray]:
     p_target_vals, p_other_vals, ratio_vals = [], [], []
     target_templates, other_templates = [], []
 
     per_class = [epochs_by_class[label] for label in class_labels]
+    metric_time_mask = (times >= METRIC_WINDOW_TMIN) & (times <= METRIC_WINDOW_TMAX)
+    if not np.any(metric_time_mask):
+        raise RuntimeError("Metric window mask is empty. Check epoch and metric window bounds.")
 
     for class_idx, cls_data in enumerate(per_class):
-        w = trca_fit(cls_data)
-        cls_proj = np.einsum("c,tcn->tn", w, cls_data)
+        cls_metric = cls_data[:, :, metric_time_mask]
+        if cls_metric.shape[0] < 2:
+            raise RuntimeError("TRCA needs at least two trials in the metric window.")
+
+        w = trca_fit(cls_metric)
+        cls_proj = np.einsum("c,tcn->tn", w, cls_metric)
 
         other_data = np.concatenate([per_class[i] for i in range(len(per_class)) if i != class_idx], axis=0)
-        other_proj = np.einsum("c,tcn->tn", w, other_data)
+        other_metric = other_data[:, :, metric_time_mask]
+        other_proj = np.einsum("c,tcn->tn", w, other_metric)
 
         p_target = cross_cov_power(cls_proj)
         p_other = cross_cov_power(cls_proj, other_proj)
@@ -253,7 +267,7 @@ def main() -> None:
         data = pickle.load(f)
 
     times, epochs_by_class, labels = prepare_epochs(data)
-    stats = analyze_trca(epochs_by_class, labels)
+    stats = analyze_trca(times, epochs_by_class, labels)
 
     output_dir = data_path.parent
     wave_path, bar_path = plot_results(times, labels, stats, output_dir)
