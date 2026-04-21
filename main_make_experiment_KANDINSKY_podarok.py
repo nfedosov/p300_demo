@@ -335,6 +335,40 @@ class ProtocolEditor(QtWidgets.QWidget):
         winner_idx = int(np.argmax(scores))
         return winner_idx, scores
 
+    def _build_unique_events(
+        self,
+        sample_timestamps: np.ndarray,
+        stim_events: Sequence[StimEvent],
+        max_samples: int,
+    ) -> np.ndarray:
+        """Map LSL event timestamps to unique sample indices for MNE Epochs."""
+        event_samples = []
+        last_sample = -1
+        dropped_events = 0
+
+        for ev in stim_events:
+            sample_idx = int(np.searchsorted(sample_timestamps, ev.onset_lsl, side="left"))
+            if sample_idx >= max_samples:
+                sample_idx = max_samples - 1
+
+            if sample_idx <= last_sample:
+                sample_idx = last_sample + 1
+
+            if sample_idx >= max_samples:
+                dropped_events += 1
+                continue
+
+            event_samples.append([sample_idx, 0, ev.class_idx + 1])
+            last_sample = sample_idx
+
+        if not event_samples:
+            raise RuntimeError("No valid stimulus events remained after aligning events to EEG samples.")
+
+        if dropped_events:
+            print(f"Warning: dropped {dropped_events} stimulus events because they fell beyond the EEG sample range.")
+
+        return np.asarray(event_samples, dtype=int)
+
     def onStartButtonClicked(self):
         if self.inlet_info is None:
             raise RuntimeError("Select an LSL stream first.")
@@ -389,15 +423,12 @@ class ProtocolEditor(QtWidgets.QWidget):
             raw.notch_filter([50.0, 100.0], verbose=False)
             raw.filter(0.3, 20.0, verbose=False)
 
-            event_samples = []
             event_ids = {scene: idx + 1 for idx, scene in enumerate(stage_scenes)}
-            for ev in stim_events:
-                sample_idx = int(np.searchsorted(sample_timestamps, ev.onset_lsl, side="left"))
-                if sample_idx >= len(sample_timestamps):
-                    sample_idx = len(sample_timestamps) - 1
-                event_samples.append([sample_idx, 0, ev.class_idx + 1])
-
-            events_array = np.asarray(event_samples, dtype=int)
+            events_array = self._build_unique_events(
+                sample_timestamps=sample_timestamps,
+                stim_events=stim_events,
+                max_samples=len(sample_timestamps),
+            )
             winner_idx, ratio_scores = self._classify_with_trca_ratio(
                 raw=raw,
                 events_by_sample=events_array,
