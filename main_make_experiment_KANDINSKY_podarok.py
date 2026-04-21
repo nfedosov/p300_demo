@@ -262,15 +262,9 @@ class ProtocolEditor(QtWidgets.QWidget):
                 self.stim_label.setText(block.message)
                 QCoreApplication.processEvents()
 
-            image_hidden = False
             while True:
                 now = pylsl.local_clock()
                 elapsed = now - start_time
-                if is_stim and (not image_hidden) and elapsed >= self.stim_duration:
-                    self.stim_label.clear()
-                    self.stim_label.setImage("clear", stim=0)
-                    QCoreApplication.processEvents()
-                    image_hidden = True
 
                 chunk, t_stamp = inlet.get_next_chunk()
                 if chunk is not None and len(chunk):
